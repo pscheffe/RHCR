@@ -3,6 +3,7 @@
 #include "ECBS.h"
 #include "LRAStar.h"
 #include "PBS.h"
+#include "PDMPC.h"
 
 KivaSystem::KivaSystem(const KivaGrid& G, MAPFSolver& solver): BasicSystem(G, solver), G(G) {}
 
@@ -31,6 +32,20 @@ void KivaSystem::initialize()
 			initialize_goal_locations();
 		}
 	}
+
+    PDMPC pdmpc(G);
+
+    int w = 5;
+
+    std::cout << "Start at for reachable set: " << starts[0] << std::endl;
+    std::cout << pdmpc.get_reachable_set(starts[0], w) << std::endl;
+
+    //G.print_map();
+
+    std::cout << "Coupling Graph:" << std::endl;
+    vector<PDMPC::bitset_t> coupling_graph = pdmpc.get_coupling_graph(starts, w);
+
+
 }
 
 void KivaSystem::initialize_start_locations()
@@ -206,6 +221,7 @@ void KivaSystem::simulate(int simulation_time)
 	this->simulation_time = simulation_time;
 	initialize();
 
+    /*
 	for (; timestep < simulation_time; timestep += simulation_window)
 	{
 		std::cout << "Timestep " << timestep << std::endl;
@@ -238,6 +254,6 @@ void KivaSystem::simulate(int simulation_time)
 
 	update_start_locations();
 	std::cout << std::endl << "Done!" << std::endl;
-	save_results();
+	save_results(); */
 }
 

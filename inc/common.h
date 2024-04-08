@@ -11,11 +11,13 @@
 #include <boost/heap/fibonacci_heap.hpp>
 #include <boost/unordered_set.hpp>
 #include <boost/unordered_map.hpp>
+#include <boost/dynamic_bitset.hpp>
 
 using boost::heap::fibonacci_heap;
 using boost::heap::compare;
 using boost::unordered_set;
 using boost::unordered_map;
+using boost::dynamic_bitset;
 
 using std::set;
 using std::vector;
