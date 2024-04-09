@@ -35,17 +35,24 @@ void KivaSystem::initialize()
 
     PDMPC pdmpc(G);
 
-    int w = 5;
+    int w = 3;
 
-    std::cout << "Start at for reachable set: " << starts[0] << std::endl;
-    std::cout << pdmpc.get_reachable_set(starts[0], w) << std::endl;
+    for(int i = 0; i < starts.size(); i++) {
+        State initial_state = starts[i];
 
-    //G.print_map();
+        std::cout << "inital state of agent " << (i + 1) << " is " << initial_state << std::endl;
 
-    std::cout << "Coupling Graph:" << std::endl;
+        PDMPC::bitset_t reachable_set = pdmpc.get_reachable_set(initial_state, w);
+        pdmpc.print_reachable_set(reachable_set, initial_state.location);
+    }
+
     vector<PDMPC::bitset_t> coupling_graph = pdmpc.get_coupling_graph(starts, w);
 
+    pdmpc.print_coupling_graph(coupling_graph);
 
+    vector<PDMPC::bitset_t> directed_coupling_graph = pdmpc.prioritize(coupling_graph);
+
+    pdmpc.print_coupling_graph(directed_coupling_graph);
 }
 
 void KivaSystem::initialize_start_locations()
