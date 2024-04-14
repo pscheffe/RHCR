@@ -35,7 +35,7 @@ void KivaSystem::initialize()
 
     PDMPC pdmpc(G);
 
-    int w = 3;
+    int w = 4;
 
     for(int i = 0; i < starts.size(); i++) {
         State initial_state = starts[i];
@@ -53,6 +53,12 @@ void KivaSystem::initialize()
     vector<PDMPC::bitset_t> directed_coupling_graph = pdmpc.prioritize(coupling_graph);
 
     pdmpc.print_coupling_graph(directed_coupling_graph);
+
+    vector<vector<int>> directed_weighted_coupling_graph = pdmpc.weigh(directed_coupling_graph, starts);
+
+    pdmpc.print_coupling_graph(directed_weighted_coupling_graph);
+
+    pdmpc.group(directed_weighted_coupling_graph, 5);
 }
 
 void KivaSystem::initialize_start_locations()
