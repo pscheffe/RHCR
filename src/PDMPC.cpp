@@ -2,11 +2,70 @@
 
 #include <random>
 
-PDMPC::PDMPC(const BasicGraph &G) : G(G) {}
+PDMPC::PDMPC(const BasicGraph &G)
+    : G {G} { }
 
-PDMPC::bitset_t PDMPC::get_reachable_set(const State &initial_state, const int &window) const
+pair<Graph, Graph> PDMPC::get_sequentially_planning_agents(const vector<State> &agent_states, const int &window, const int &max_num_CLs) const {
+    Graph coupling = this->get_coupling_graph(agent_states, window);
+
+    Graph directed_coupling = this->prioritize(coupling);
+
+    WeightedGraph<double> directed_weighted_coupling = this->weigh(directed_coupling, agent_states, window);
+
+    Graph directed_sequential_coupling = this->group(directed_weighted_coupling, max_num_CLs);
+
+    return make_pair(directed_coupling, directed_sequential_coupling);
+}
+
+boost::optional<vector<int>> PDMPC::get_computation_levels(const matrix_t &directed_coupling_graph) {
+    auto num_agents = directed_coupling_graph.size();
+    matrix_t A(directed_coupling_graph);
+
+    //Kahn's algorithm
+    vector<int> computation_levels(num_agents);
+    list<int> no_incoming_edges;
+    bitset_t assigned_agents_mask(num_agents);
+
+    int current_cl = 1;
+    while(!assigned_agents_mask.all()) {
+        //find unassigned nodes/agents without incoming edges
+        for (auto i = 0; i < num_agents; i++) {
+            if(!assigned_agents_mask[i]) {
+                bool has_incoming_edge = false;
+                for (auto j = 0; j < num_agents; j++) {
+                    if(A[j][i]) {
+                        has_incoming_edge = true;
+                    }
+                }
+                if (!has_incoming_edge) {
+                    no_incoming_edges.emplace_back(i);
+                }
+            }
+        }
+
+        if (no_incoming_edges.empty()) {
+            return boost::optional<vector<int>>{};
+        }
+
+        for(auto agent : no_incoming_edges) {
+            computation_levels[agent] = current_cl;
+            assigned_agents_mask[agent] = true;
+            //clear rows
+            for(int i = 0; i < num_agents; i++) {
+                A[agent][i] = false;
+            }
+        }
+
+        no_incoming_edges.clear();
+        current_cl = current_cl + 1;
+    }
+
+    return computation_levels;
+}
+
+bitset_t PDMPC::get_reachable_set(const State &initial_state, const int &window) const
 {
-    PDMPC::bitset_t reachable_set(G.size());
+    bitset_t reachable_set(G.size());
 
     deque<pair<int, int>> q;
     q.emplace_back(initial_state.location, 0);
@@ -33,13 +92,13 @@ PDMPC::bitset_t PDMPC::get_reachable_set(const State &initial_state, const int &
     return reachable_set;
 }
 
-vector<PDMPC::bitset_t> PDMPC::get_coupling_graph(const vector<State> &agent_states, const int &window) const {
+Graph PDMPC::get_coupling_graph(const vector<State> &agent_states, const int &window) const {
 
     auto num_agents = agent_states.size();
 
-    vector<PDMPC::bitset_t> coupling_matrix(num_agents, PDMPC::bitset_t(num_agents));
+    matrix_t coupling_matrix(num_agents, bitset_t(num_agents));
 
-    vector<PDMPC::bitset_t> reachable_sets(num_agents);
+    matrix_t reachable_sets(num_agents);
 
     for(int i = 0; i < num_agents; i++) {
         reachable_sets[i] = get_reachable_set(agent_states[i], window);
@@ -57,29 +116,23 @@ vector<PDMPC::bitset_t> PDMPC::get_coupling_graph(const vector<State> &agent_sta
     return coupling_matrix;
 }
 
-vector<PDMPC::bitset_t> PDMPC::prioritize(const vector<PDMPC::bitset_t>& coupling_graph) const {
+Graph PDMPC::prioritize(const matrix_t& coupling_graph) const {
     auto num_agents = coupling_graph.size();
 
-    std::vector<int> range(num_agents);
+    vector<int> agent_indices(num_agents);
 
     for(auto i = 0; i < num_agents; i++) {
-        range[i] = i;
+        agent_indices[i] = i;
     }
 
-    std::shuffle(range.begin(), range.end(), std::mt19937(std::random_device()()));
+    std::shuffle(agent_indices.begin(), agent_indices.end(), std::mt19937(std::random_device()()));
 
-    std::cout << "priority order: ";
-    for(int e: range) {
-        std::cout << e + 1 << ", ";
-    }
-    std::cout << std::endl;
+    matrix_t directed_coupling_graph(coupling_graph);
 
-    vector<PDMPC::bitset_t> directed_coupling_graph(coupling_graph);
-
-    for(auto &e: range) {
-        for(int i = 0; i < directed_coupling_graph[e].size(); i++) {
-            if(directed_coupling_graph[e][i] && directed_coupling_graph[i][e]) {
-                directed_coupling_graph[i][e].flip();
+    for(int &agent_index: agent_indices) {
+        for(int i = 0; i < directed_coupling_graph[agent_index].size(); i++) {
+            if(directed_coupling_graph[agent_index][i] && directed_coupling_graph[i][agent_index]) {
+                directed_coupling_graph[i][agent_index].flip();
             }
         }
     }
@@ -87,91 +140,97 @@ vector<PDMPC::bitset_t> PDMPC::prioritize(const vector<PDMPC::bitset_t>& couplin
     return directed_coupling_graph;
 }
 
-vector<vector<int>> PDMPC::weigh(const vector<PDMPC::bitset_t> &directed_coupling_graph, const vector<State> &agent_states) const {
-    vector<vector<int>> directed_weighted_coupling_graph(directed_coupling_graph.size(), vector<int>(directed_coupling_graph.size()));
+WeightedGraph<double> PDMPC::weigh(const matrix_t &directed_coupling_graph, const vector<State> &agent_states, const int &window) const {
+    WeightedGraph<double> directed_weighted_coupling_graph(directed_coupling_graph.size(), vector<double>(directed_coupling_graph.size()));
+
+    double max_distance = 2 * window;
 
     for(int i = 0; i < directed_coupling_graph.size(); i++) {
         for(int j = 0; j < directed_coupling_graph[i].size(); j++) {
             int loc_a_i = agent_states[i].location;
             int loc_a_j = agent_states[j].location;
-            directed_weighted_coupling_graph[i][j] = directed_coupling_graph[i][j] * G.get_Manhattan_distance(loc_a_i, loc_a_j);
+
+            double inverse_distance = 1 - (G.get_Manhattan_distance(loc_a_i, loc_a_j) / max_distance);
+
+            directed_weighted_coupling_graph[i][j] = directed_coupling_graph[i][j] * inverse_distance;
         }
     }
 
     return directed_weighted_coupling_graph;
 }
 
-vector<PDMPC::bitset_t> PDMPC::group(const vector<vector<int>> &directed_weighted_coupling_graph, const int &max_num_cls) const {
+template<typename T>
+Graph PDMPC::group(const WeightedGraph<T> &directed_weighted_coupling_graph, const int &max_num_CLs) const {
     auto num_agents = directed_weighted_coupling_graph.size();
-    vector<PDMPC::bitset_t> directed_sequential_coupling_graph(num_agents, PDMPC::bitset_t(num_agents));
+    matrix_t directed_sequential_coupling_graph(num_agents, bitset_t(num_agents));
 
-    if(max_num_cls == 1) {
+    if(max_num_CLs == 1) {
         return directed_sequential_coupling_graph;
     }
 
+    //get list of weighted edges
+    list<tuple<int, int, T>> weighted_edges;
+    for(int i = 0; i < num_agents; i++) {
+        for(int j = 0; j < num_agents; j++) {
+            if(directed_weighted_coupling_graph[i][j]) {
+                weighted_edges.push_back(make_tuple(i, j, directed_weighted_coupling_graph[i][j]));
+            }
+        }
+    }
+
+    weighted_edges.sort([](tuple<int, int, T> const &t1, tuple<int, int, T> const &t2) -> int {
+        return std::get<2>(t1) > std::get<2>(t2);
+    } );
+
     boost::optional<vector<int>> cls_optional = get_computation_levels(directed_sequential_coupling_graph);
 
-    if(cls_optional.has_value()) {
-        vector<int> cls = cls_optional.get();
-        for(auto e : cls) {
-            std::cout << e << " ,";
+    if(!cls_optional.has_value()) {
+        return directed_sequential_coupling_graph;
+    }
+
+    vector<int> cls_of_agents = cls_optional.get();
+
+    //find sequentializable edges greedily
+    for(tuple<int, int, T> &node: weighted_edges) {
+        int vertex_starting = std::get<0>(node);
+        int vertex_ending = std::get<1>(node);
+        int level_starting = cls_of_agents[vertex_starting];
+        int level_ending = cls_of_agents[vertex_ending];
+
+        //we can sequentialize edges if the priority of the ending vertex's level is lower than that of the starting vertex
+        if(level_starting < level_ending) {
+            directed_sequential_coupling_graph[vertex_starting][vertex_ending] = true;
+            continue;
         }
-        std::cout << std::endl;
-    } else {
-        std::cout << "optional has no value" << std::endl;
+
+
+        //otherwise we check if we can move the ending vertex to a level with lower priority
+        directed_sequential_coupling_graph[vertex_starting][vertex_ending] = true;
+        boost::optional<vector<int>> new_cls_optional = get_computation_levels(directed_sequential_coupling_graph);
+
+        if(!new_cls_optional.has_value()) {
+            //undo
+            directed_sequential_coupling_graph[vertex_starting][vertex_ending] = false;
+            continue;
+        }
+
+        vector<int> new_cls = new_cls_optional.get();
+        if(*std::max_element(new_cls.begin(), new_cls.end()) <= max_num_CLs) {
+            cls_of_agents = new_cls;
+        } else {
+            directed_sequential_coupling_graph[vertex_starting][vertex_ending] = false;
+        }
+
     }
 
     return directed_sequential_coupling_graph;
 }
+template matrix_t PDMPC::group(const vector<vector<double>> &directed_weighted_coupling_graph, const int &max_num_CLs) const;
 
-boost::optional<vector<int>> PDMPC::get_computation_levels(const vector<PDMPC::bitset_t> &directed_coupling_graph) const {
-    auto num_agents = directed_coupling_graph.size();
-    vector<PDMPC::bitset_t> A(directed_coupling_graph);
-
-    //Kahn's algorithm
-    vector<int> computation_levels(num_agents);
-    std::list<int> no_incoming_edges;
-    PDMPC::bitset_t assigned_agents_mask(num_agents);
-
-    int current_cl_level = 1;
-    while(!assigned_agents_mask.all()) {
-        //get agents with no incoming edges
-        for (auto i = 0; i < num_agents; i++) {
-            if(!assigned_agents_mask[i]) {
-                int num_incoming_edges = 0;
-                for (auto j = 0; j < num_agents; j++) {
-                    num_incoming_edges = num_incoming_edges + A[j][i];
-                }
-                if (num_incoming_edges == 0) {
-                    no_incoming_edges.emplace_back(i);
-                }
-            }
-        }
-
-        if (no_incoming_edges.empty()) {
-            return boost::optional<vector<int>>{};
-        }
-
-        for(auto agent : no_incoming_edges) {
-            computation_levels[agent] = current_cl_level;
-            assigned_agents_mask[agent] = true;
-            //clear rows
-            for(int i = 0; i < num_agents; i++) {
-                A[agent][i] = false;
-            }
-        }
-
-        no_incoming_edges.clear();
-        current_cl_level = current_cl_level + 1;
-    }
-
-    return computation_levels;
-
-}
 
 //debugging
 
-void PDMPC::print_reachable_set(PDMPC::bitset_t bs, int start_location) const {
+void PDMPC::print_reachable_set(bitset_t bs, int start_location) const {
     std::cout << "--------------------------------------------------" << std::endl;
     std::cout << "reachable set:" << std::endl;
     std::cout << std::endl;
@@ -189,9 +248,10 @@ void PDMPC::print_reachable_set(PDMPC::bitset_t bs, int start_location) const {
     std::cout << std::endl;
 }
 
-void PDMPC::print_coupling_graph(vector<vector<int>> graph) const {
+template<typename T>
+void PDMPC::print_coupling_graph(const WeightedGraph<T> &graph, const string &headline) const {
     std::cout << "--------------------------------------------------" << std::endl;
-    std::cout << "coupling graph:" << std::endl;
+    std::cout << headline << std::endl;
     std::cout << std::endl;
     for(auto &row : graph) {
         for(auto &e : row) {
@@ -201,27 +261,15 @@ void PDMPC::print_coupling_graph(vector<vector<int>> graph) const {
     }
     std::cout << std::endl;
 }
+template void PDMPC::print_coupling_graph(const WeightedGraph<int> &graph, const string &headline) const;
+template void PDMPC::print_coupling_graph(const WeightedGraph<double> &graph, const string &headline) const;
 
-void PDMPC::print_coupling_graph(vector<PDMPC::bitset_t> graph) const {
+void PDMPC::print_coupling_graph(const Graph &graph, const string &headline) const {
     vector<vector<int>> g_v = vector<vector<int>>(graph.size(), vector<int>(graph.size()));
     for(int i = 0; i < g_v.size(); i++) {
         for(int j = 0; j < g_v.size(); j++) {
             g_v[i][j] = graph[i][j];
         }
     }
-    print_coupling_graph(g_v);
-}
-
-vector<PDMPC::bitset_t> PDMPC::to_unweighted_graph(vector<vector<int>> graph) {
-    vector<PDMPC::bitset_t> unweighted_graph(graph.size(), PDMPC::bitset_t(graph.size()));
-
-    for(int i = 0; i < unweighted_graph.size(); i++) {
-        for(int j = 0; j < unweighted_graph.size(); j++) {
-            if(graph[i][j]) {
-                unweighted_graph[i][j].flip();
-            }
-        }
-    }
-
-    return unweighted_graph;
+    print_coupling_graph(g_v, headline);
 }

@@ -36,29 +36,11 @@ void KivaSystem::initialize()
     PDMPC pdmpc(G);
 
     int w = 4;
+    int max_CLs = 3;
 
-    for(int i = 0; i < starts.size(); i++) {
-        State initial_state = starts[i];
-
-        std::cout << "inital state of agent " << (i + 1) << " is " << initial_state << std::endl;
-
-        PDMPC::bitset_t reachable_set = pdmpc.get_reachable_set(initial_state, w);
-        pdmpc.print_reachable_set(reachable_set, initial_state.location);
-    }
-
-    vector<PDMPC::bitset_t> coupling_graph = pdmpc.get_coupling_graph(starts, w);
-
-    pdmpc.print_coupling_graph(coupling_graph);
-
-    vector<PDMPC::bitset_t> directed_coupling_graph = pdmpc.prioritize(coupling_graph);
-
-    pdmpc.print_coupling_graph(directed_coupling_graph);
-
-    vector<vector<int>> directed_weighted_coupling_graph = pdmpc.weigh(directed_coupling_graph, starts);
-
-    pdmpc.print_coupling_graph(directed_weighted_coupling_graph);
-
-    pdmpc.group(directed_weighted_coupling_graph, 5);
+    pair<Graph, Graph> seq = pdmpc.get_sequentially_planning_agents(starts, w, max_CLs);
+    pdmpc.print_coupling_graph(seq.first, "directed coupling graph:");
+    pdmpc.print_coupling_graph(seq.second, "sequential coupling graph:");
 }
 
 void KivaSystem::initialize_start_locations()
@@ -234,7 +216,7 @@ void KivaSystem::simulate(int simulation_time)
 	this->simulation_time = simulation_time;
 	initialize();
 
-    /*
+
 	for (; timestep < simulation_time; timestep += simulation_window)
 	{
 		std::cout << "Timestep " << timestep << std::endl;
@@ -267,6 +249,6 @@ void KivaSystem::simulate(int simulation_time)
 
 	update_start_locations();
 	std::cout << std::endl << "Done!" << std::endl;
-	save_results(); */
+	save_results();
 }
 
