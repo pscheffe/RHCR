@@ -17,9 +17,9 @@ pair<Graph, Graph> PDMPC::get_sequentially_planning_agents(const vector<State> &
     return make_pair(directed_coupling, directed_sequential_coupling);
 }
 
-boost::optional<vector<int>> PDMPC::get_computation_levels(const matrix_t &directed_coupling_graph) {
+boost::optional<vector<int>> PDMPC::get_computation_levels(const Graph &directed_coupling_graph) {
     auto num_agents = directed_coupling_graph.size();
-    matrix_t A(directed_coupling_graph);
+    Graph A(directed_coupling_graph);
 
     //Kahn's algorithm
     vector<int> computation_levels(num_agents);
@@ -96,9 +96,9 @@ Graph PDMPC::get_coupling_graph(const vector<State> &agent_states, const int &wi
 
     auto num_agents = agent_states.size();
 
-    matrix_t coupling_matrix(num_agents, bitset_t(num_agents));
+    Graph coupling(num_agents, bitset_t(num_agents));
 
-    matrix_t reachable_sets(num_agents);
+    vector<bitset_t> reachable_sets(num_agents);
 
     for(int i = 0; i < num_agents; i++) {
         reachable_sets[i] = get_reachable_set(agent_states[i], window);
@@ -107,16 +107,16 @@ Graph PDMPC::get_coupling_graph(const vector<State> &agent_states, const int &wi
     for(auto i = 0; i < num_agents; i++) {
         for(auto j = i + 1; j < num_agents; j++) {
             if(reachable_sets[i].intersects(reachable_sets[j])) {
-                coupling_matrix[i][j].flip();
-                coupling_matrix[j][i].flip();
+                coupling[i][j].flip();
+                coupling[j][i].flip();
             }
         }
     }
 
-    return coupling_matrix;
+    return coupling;
 }
 
-Graph PDMPC::prioritize(const matrix_t& coupling_graph) const {
+Graph PDMPC::prioritize(const Graph &coupling_graph) const {
     auto num_agents = coupling_graph.size();
 
     vector<int> agent_indices(num_agents);
@@ -127,7 +127,7 @@ Graph PDMPC::prioritize(const matrix_t& coupling_graph) const {
 
     std::shuffle(agent_indices.begin(), agent_indices.end(), std::mt19937(std::random_device()()));
 
-    matrix_t directed_coupling_graph(coupling_graph);
+    Graph directed_coupling_graph(coupling_graph);
 
     for(int &agent_index: agent_indices) {
         for(int i = 0; i < directed_coupling_graph[agent_index].size(); i++) {
@@ -140,7 +140,7 @@ Graph PDMPC::prioritize(const matrix_t& coupling_graph) const {
     return directed_coupling_graph;
 }
 
-WeightedGraph<double> PDMPC::weigh(const matrix_t &directed_coupling_graph, const vector<State> &agent_states, const int &window) const {
+WeightedGraph<double> PDMPC::weigh(const Graph &directed_coupling_graph, const vector<State> &agent_states, const int &window) const {
     WeightedGraph<double> directed_weighted_coupling_graph(directed_coupling_graph.size(), vector<double>(directed_coupling_graph.size()));
 
     double max_distance = 2 * window;
@@ -150,7 +150,7 @@ WeightedGraph<double> PDMPC::weigh(const matrix_t &directed_coupling_graph, cons
             int loc_a_i = agent_states[i].location;
             int loc_a_j = agent_states[j].location;
 
-            double inverse_distance = 1 - (G.get_Manhattan_distance(loc_a_i, loc_a_j) / max_distance);
+            double inverse_distance = 1 - (G.heuristics.at(loc_a_i).at(loc_a_j) / max_distance);
 
             directed_weighted_coupling_graph[i][j] = directed_coupling_graph[i][j] * inverse_distance;
         }
@@ -162,7 +162,7 @@ WeightedGraph<double> PDMPC::weigh(const matrix_t &directed_coupling_graph, cons
 template<typename T>
 Graph PDMPC::group(const WeightedGraph<T> &directed_weighted_coupling_graph, const int &max_num_CLs) const {
     auto num_agents = directed_weighted_coupling_graph.size();
-    matrix_t directed_sequential_coupling_graph(num_agents, bitset_t(num_agents));
+    Graph directed_sequential_coupling_graph(num_agents, bitset_t(num_agents));
 
     if(max_num_CLs == 1) {
         return directed_sequential_coupling_graph;
@@ -178,6 +178,7 @@ Graph PDMPC::group(const WeightedGraph<T> &directed_weighted_coupling_graph, con
         }
     }
 
+    //sort the edges in decreasing order
     weighted_edges.sort([](tuple<int, int, T> const &t1, tuple<int, int, T> const &t2) -> int {
         return std::get<2>(t1) > std::get<2>(t2);
     } );
@@ -225,7 +226,7 @@ Graph PDMPC::group(const WeightedGraph<T> &directed_weighted_coupling_graph, con
 
     return directed_sequential_coupling_graph;
 }
-template matrix_t PDMPC::group(const vector<vector<double>> &directed_weighted_coupling_graph, const int &max_num_CLs) const;
+template Graph PDMPC::group(const vector<vector<double>> &directed_weighted_coupling_graph, const int &max_num_CLs) const;
 
 
 //debugging

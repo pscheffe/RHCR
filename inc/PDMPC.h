@@ -5,13 +5,10 @@
 
 using bitset_t = boost::dynamic_bitset<>;
 
-using matrix_t = vector<bitset_t>;
-using Graph = matrix_t;
+using Graph = vector<bitset_t>;
 
 template<typename T>
-using weighted_matrix_t = vector<vector<T>>;
-template<typename T>
-using WeightedGraph = weighted_matrix_t<T>;
+using WeightedGraph = vector<vector<T>>;
 
 class PDMPC
 {
