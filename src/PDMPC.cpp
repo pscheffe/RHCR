@@ -5,8 +5,8 @@
 PDMPC::PDMPC(const BasicGraph &G)
     : G {G} { }
 
-pair<Graph, Graph> PDMPC::get_sequentially_planning_agents(const vector<State> &agent_states, const int &window, const int &max_num_CLs) const {
-    Graph coupling = this->get_coupling_graph(agent_states, window);
+tuple<Graph, Graph, vector<bitset_t>> PDMPC::get_sequentially_planning_agents(const vector<State> &agent_states, const int &window, const int &max_num_CLs) const {
+    auto[coupling, reachable_sets] = this->get_coupling_graph(agent_states, window);
 
     Graph directed_coupling = this->prioritize(coupling);
 
@@ -14,7 +14,7 @@ pair<Graph, Graph> PDMPC::get_sequentially_planning_agents(const vector<State> &
 
     Graph directed_sequential_coupling = this->group(directed_weighted_coupling, max_num_CLs);
 
-    return make_pair(directed_coupling, directed_sequential_coupling);
+    return make_tuple(directed_coupling, directed_sequential_coupling, reachable_sets);
 }
 
 boost::optional<vector<int>> PDMPC::get_computation_levels(const Graph &directed_coupling_graph) {
@@ -92,7 +92,7 @@ bitset_t PDMPC::get_reachable_set(const State &initial_state, const int &window)
     return reachable_set;
 }
 
-Graph PDMPC::get_coupling_graph(const vector<State> &agent_states, const int &window) const {
+pair<Graph, vector<bitset_t>> PDMPC::get_coupling_graph(const vector<State> &agent_states, const int &window) const {
 
     auto num_agents = agent_states.size();
 
@@ -113,7 +113,7 @@ Graph PDMPC::get_coupling_graph(const vector<State> &agent_states, const int &wi
         }
     }
 
-    return coupling;
+    return make_pair(coupling, reachable_sets);
 }
 
 Graph PDMPC::prioritize(const Graph &coupling_graph) const {
@@ -231,15 +231,13 @@ template Graph PDMPC::group(const vector<vector<double>> &directed_weighted_coup
 
 //debugging
 
-void PDMPC::print_reachable_set(bitset_t bs, int start_location) const {
-    std::cout << "--------------------------------------------------" << std::endl;
-    std::cout << "reachable set:" << std::endl;
-    std::cout << std::endl;
+void PDMPC::print_reachable_set(const bitset_t &reachable_set, const int &start_location, const string &headline) const {
+    print_headline(headline);
     for(int i = 0; i < G.get_rows(); i++) {
         for(int j = 0; j < G.get_cols(); j++) {
             int id = i * G.get_cols() + j;
             if(id != start_location) {
-                std::cout << bs[id] << " ";
+                std::cout << reachable_set[id] << " ";
             } else {
                 std::cout << "x ";
             }
@@ -251,9 +249,7 @@ void PDMPC::print_reachable_set(bitset_t bs, int start_location) const {
 
 template<typename T>
 void PDMPC::print_coupling_graph(const WeightedGraph<T> &graph, const string &headline) const {
-    std::cout << "--------------------------------------------------" << std::endl;
-    std::cout << headline << std::endl;
-    std::cout << std::endl;
+    print_headline(headline);
     for(auto &row : graph) {
         for(auto &e : row) {
             std::cout << e << " ";
@@ -273,4 +269,10 @@ void PDMPC::print_coupling_graph(const Graph &graph, const string &headline) con
         }
     }
     print_coupling_graph(g_v, headline);
+}
+
+void PDMPC::print_headline(const std::string &headline) const {
+    std::cout << "--------------------------------------------------" << std::endl;
+    std::cout << headline << std::endl;
+    std::cout << std::endl;
 }

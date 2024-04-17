@@ -18,10 +18,10 @@ public:
 
     static boost::optional<vector<int>> get_computation_levels(const Graph &directed_coupling_graph);
 
-    pair<Graph, Graph> get_sequentially_planning_agents(const vector<State> &agent_states, const int &window, const int &max_num_CLs) const;
+    tuple<Graph, Graph, vector<bitset_t>> get_sequentially_planning_agents(const vector<State> &agent_states, const int &window, const int &max_num_CLs) const;
 
     //debugging
-    void print_reachable_set(bitset_t, int start_location) const;
+    void print_reachable_set(const bitset_t &reachable_set, const int &start_location=-1, const string &headline="reachable set") const;
 
     template<typename T>
     void print_coupling_graph(const WeightedGraph<T> &graph, const string &headline="weighted coupling graph") const;
@@ -33,7 +33,7 @@ private:
 
     bitset_t get_reachable_set(const State &initial_state, const int &window) const;
 
-    Graph get_coupling_graph(const vector<State> &agent_states, const int &window) const;
+    pair<Graph, vector<bitset_t >> get_coupling_graph(const vector<State> &agent_states, const int &window) const;
 
     Graph prioritize(const Graph &coupling_graph) const;
 
@@ -41,5 +41,7 @@ private:
 
     template<typename T>
     Graph group(const WeightedGraph<T> &directed_weighted_coupling_graph, const int &max_num_CLs) const;
+
+    void print_headline(const string &headline) const;
 
 };
