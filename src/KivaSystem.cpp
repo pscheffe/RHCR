@@ -32,27 +32,6 @@ void KivaSystem::initialize()
 			initialize_goal_locations();
 		}
 	}
-
-    PDMPC pdmpc(G);
-
-    int w = 4;
-    int max_CLs = 3;
-
-    tuple<Graph, Graph, vector<bitset_t>> seq = pdmpc.get_sequentially_planning_agents(starts, w, max_CLs);
-    pdmpc.print_coupling_graph(std::get<0>(seq), "directed coupling graph:");
-    pdmpc.print_coupling_graph(std::get<1>(seq), "sequential coupling graph:");
-    vector<bitset_t> reachable_sets = std::get<2>(seq);
-    for (int i = 0; i < reachable_sets.size(); i++) {
-        pdmpc.print_reachable_set(reachable_sets[i], starts[i].location, "reachable set of agent " + std::to_string(i + 1));
-    }
-    boost::optional<vector<int>> cls = PDMPC::get_computation_levels(std::get<1>(seq));
-    if(cls.has_value()) {
-        for (auto cl: cls.get()) {
-            std::cout << cl << ",";
-        }
-
-        std::cout << std::endl;
-    }
 }
 
 void KivaSystem::initialize_start_locations()
